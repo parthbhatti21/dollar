@@ -1,11 +1,11 @@
 # Dollar AI Voice Assistant
 
-A fully local, always-running AI voice assistant that listens continuously for the wake word "hey dollar" and executes natural-language commands by mapping them to OS-level actions.
+A fully local, always-running AI voice assistant that listens continuously for the wake word "hey dollar jack" and executes natural-language commands by mapping them to OS-level actions.
 
 ## 🎯 Features
 
 - **24/7 Background Operation**: Runs continuously with minimal CPU usage
-- **Always-On Wake Word Detection**: Listens for "hey dollar" trigger phrase
+- **Always-On Wake Word Detection**: Listens for "hey dollar jack" trigger phrase
 - **100% Local**: No cloud calls, all processing happens on your device
 - **Cross-Platform**: Supports macOS, Windows, and Linux
 - **Modular Architecture**: Easy to extend with new commands
@@ -100,7 +100,11 @@ python main.py
 The assistant will:
 1. Initialize all components
 2. Say "Dollar assistant is ready."
+<<<<<<< HEAD
 3. Start listening for "hey dollar" (or your configured wake word)
+=======
+3. Start listening for "hey dollar jack"
+>>>>>>> 0546f24de41d75a20e976779fb47f19c8e9f80d4
 4. Process commands when wake word is detected
 
 ### Run in Background (Optional)
