@@ -5,7 +5,7 @@ A fully local, always-running AI voice assistant that listens continuously for t
 ## 🎯 Features
 
 - **24/7 Background Operation**: Runs continuously with minimal CPU usage
-- **Always-On Wake Word Detection**: Listens for "hey dollar" trigger phrase
+- **Always-On Wake Word Detection**: Listens for "hey dollar jack" trigger phrase
 - **100% Local**: No cloud calls, all processing happens on your device
 - **Cross-Platform**: Supports macOS, Windows, and Linux
 - **Modular Architecture**: Easy to extend with new commands
@@ -90,7 +90,7 @@ python main.py
 The assistant will:
 1. Initialize all components
 2. Say "Dollar assistant is ready."
-3. Start listening for "hey dollar"
+3. Start listening for "hey dollar jack"
 4. Process commands when wake word is detected
 
 ### Stop the Assistant
