@@ -3,7 +3,7 @@
 # Wake word detection settings
 wake_word:
   method: porcupine  # Options: porcupine, silero, simple
-  porcupine_access_key: "9hh0EnNx9fMqzipUHY38zQLL7GWC3zDGSs1ipIEbL1bhvcIheNY/xw=="  # Get free key from https://console.picovoice.ai/
+  porcupine_access_key: "😛"  # Get free key from https://console.picovoice.ai/ and replace it
   keyword_path: "keywords/Dollar-jack_en_mac_v3_0_0.ppn"  # Path to custom keyword file (trained as "dollar jack")
 
 # Speech-to-Text settings
