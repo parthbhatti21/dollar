@@ -1,6 +1,6 @@
 # Dollar AI Voice Assistant
 
-A fully local, always-running AI voice assistant that listens continuously for the wake word "hey dollar" and executes natural-language commands by mapping them to OS-level actions.
+A fully local, always-running AI voice assistant that listens continuously for the wake word "hey dollar jack" and executes natural-language commands by mapping them to OS-level actions.
 
 ## 🎯 Features
 
