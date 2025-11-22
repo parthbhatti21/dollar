@@ -80,9 +80,19 @@ This will verify all dependencies and components are properly installed.
 
 ## 🏃 Running the Assistant
 
-### Manual Start
+### Start the Assistant
+
+**From the project root directory:**
 
 ```bash
+cd agent
+python main.py
+```
+
+Or if using a virtual environment:
+
+```bash
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 cd agent
 python main.py
 ```
@@ -90,14 +100,41 @@ python main.py
 The assistant will:
 1. Initialize all components
 2. Say "Dollar assistant is ready."
-3. Start listening for "hey dollar"
+3. Start listening for "hey dollar" (or your configured wake word)
 4. Process commands when wake word is detected
+
+### Run in Background (Optional)
+
+To run the assistant in the background and keep using your terminal:
+
+**macOS/Linux:**
+```bash
+cd agent
+nohup python main.py > ../dollar.log 2>&1 &
+```
+
+**Check if it's running:**
+```bash
+pgrep -f "python.*main.py"
+```
+
+**View logs:**
+```bash
+tail -f dollar.log
+```
 
 ### Stop the Assistant
 
-Say: **"stop the agent"** or **"stop dollar"** or **"shut down"**
+**Option 1: Voice Command**
+Say: **"dollar jack"** → **"stop the agent"** or **"stop dollar"** or **"shut down"**
 
-Or press `Ctrl+C` in the terminal.
+**Option 2: Terminal Command**
+```bash
+pkill -f "python.*main.py"
+```
+
+**Option 3: Keyboard Interrupt**
+If running in foreground, press `Ctrl+C` in the terminal.
 
 ## 🔧 Configuration
 
@@ -120,18 +157,32 @@ Edit `agent/config.yaml` to customize:
 - **"open [app name]"** / **"launch [app name]"** - Open an application
   - Examples: "open chrome", "launch terminal", "start calculator"
 
+### Media Control
+- **"play"** / **"play music"** / **"start music"** - Play/resume media
+- **"pause"** / **"pause music"** - Pause media playback
+- **"next song"** / **"next track"** - Skip to next track
+- **"previous song"** / **"previous track"** - Go to previous track
+- **"stop"** / **"stop music"** / **"stop the song"** - Stop media playback
+- **"play [song name] on spotify"** / **"spotify [song name]"** - Play a specific song on Spotify
+  - Examples: "play bohemian rhapsody on spotify", "spotify shape of you"
+
 ### Volume Control
 - **"volume up"** / **"increase volume"** - Increase volume
 - **"volume down"** / **"decrease volume"** - Decrease volume
 - **"set volume to [number]"** - Set volume to specific level (0-100)
 
-### Network
+### Network & Bluetooth
 - **"turn on wifi"** / **"enable wifi"** - Enable WiFi
 - **"turn off wifi"** / **"disable wifi"** - Disable WiFi
+- **"turn on bluetooth"** / **"enable bluetooth"** - Enable Bluetooth
+- **"turn off bluetooth"** / **"disable bluetooth"** - Disable Bluetooth
 
 ### Information
 - **"what time"** / **"current time"** - Get current time
 - **"what date"** / **"current date"** - Get current date
+- **"how are you"** / **"hello"** - Greeting
+- **"thank you"** / **"thanks"** - Thank the assistant
+- **"goodbye"** / **"bye"** - Say goodbye
 
 ## 🏗️ Architecture
 
