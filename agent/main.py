@@ -19,14 +19,30 @@ from visual_indicator import VisualIndicator
 from config import load_config
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('agent.log'),
-        logging.StreamHandler(sys.stdout)  # Ensure output goes to stdout
-    ]
-)
+# File handler: detailed logs (INFO level)
+file_handler = logging.FileHandler('agent.log')
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+
+# Console handler: minimal output (only WARNING and ERROR)
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setLevel(logging.WARNING)  # Only warnings and errors to console
+console_handler.setFormatter(logging.Formatter('%(levelname)s: %(message)s'))
+
+# Root logger
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.DEBUG)  # Capture everything for file
+root_logger.addHandler(file_handler)
+root_logger.addHandler(console_handler)
+
+# Suppress verbose logging from other modules (only show in file, not console)
+for module_name in ['wake_word', 'speech_to_text', 'intent_classifier', 'command_router', 
+                     'os_commands', 'voice_output', 'visual_indicator', 'config']:
+    module_logger = logging.getLogger(module_name)
+    module_logger.setLevel(logging.DEBUG)  # Still log to file
+    # Console handler already set to WARNING, so these won't show
+
+# Main module logger
 logger = logging.getLogger(__name__)
 
 class DollarAssistant:
@@ -38,7 +54,7 @@ class DollarAssistant:
         self.running = True
         
         # Initialize components
-        logger.info("Initializing Dollar Assistant...")
+        logger.debug("Initializing Dollar Assistant...")
         self.wake_word = WakeWordDetector(self.config)
         self.stt = SpeechToText(self.config)
         self.classifier = IntentClassifier(self.config)
@@ -50,11 +66,11 @@ class DollarAssistant:
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
         
-        logger.info("Dollar Assistant initialized successfully")
+        logger.debug("Dollar Assistant initialized successfully")
     
     def _signal_handler(self, signum, frame):
         """Handle shutdown signals gracefully."""
-        logger.info("Received shutdown signal, stopping assistant...")
+        logger.debug("Received shutdown signal, stopping assistant...")
         self.running = False
     
     def record_user_speech(self, duration=3):
@@ -71,7 +87,7 @@ class DollarAssistant:
         import numpy as np
         
         sample_rate = self.config.get('audio', {}).get('sample_rate', 16000)
-        logger.info(f"Recording for {duration} seconds...")
+        logger.debug(f"Recording for {duration} seconds...")
         
         # Record audio
         audio = sd.rec(
@@ -110,19 +126,20 @@ class DollarAssistant:
     
     def run(self):
         """Main loop - runs continuously until stopped."""
-        logger.info("Starting Dollar Assistant main loop...")
+        logger.debug("Starting Dollar Assistant main loop...")
         
         # Test TTS on startup
         try:
-            logger.info("Testing TTS...")
+            logger.debug("Testing TTS...")
             self.voice.speak("Dollar assistant is ready.")
-            logger.info("TTS test successful")
+            logger.debug("TTS test successful")
         except Exception as e:
             logger.error(f"TTS test failed: {e}", exc_info=True)
             logger.warning("Continuing without TTS - check logs for errors")
         
-        logger.info(f"Wake word method: {self.wake_word.method}")
-        logger.info("Listening for wake word...")
+        logger.debug(f"Wake word method: {self.wake_word.method}")
+        print("✅ Dollar Assistant is working")
+        print("👂 Listening for wake word...")
         
         while self.running:
             try:
@@ -134,7 +151,8 @@ class DollarAssistant:
                     wake_detected = False
                 
                 if wake_detected:
-                    logger.info("Wake word detected!")
+                    print("🎤 Wake word detected - listening...")
+                    logger.debug("Wake word detected!")
                     
                     # Show visual indicator - listening
                     self.visual.show_listening()
@@ -145,11 +163,11 @@ class DollarAssistant:
                     # Start recording immediately (no delay, no TTS acknowledgment)
                     # This allows instant response to user commands
                     try:
-                        logger.info("Recording user command immediately...")
+                        logger.debug("Recording user command immediately...")
                         audio = self.record_user_speech(
                             duration=self.config.get('audio', {}).get('record_duration', 3)
                         )
-                        logger.info(f"Recorded {len(audio)} samples")
+                        logger.debug(f"Recorded {len(audio)} samples")
                         
                         # Acknowledge after recording (non-blocking, quick)
                         # This way user knows we heard them, but we don't delay listening
@@ -171,12 +189,12 @@ class DollarAssistant:
                     
                     # Convert speech to text
                     try:
-                        logger.info("Transcribing speech...")
+                        logger.debug("Transcribing speech...")
                         text = self.stt.transcribe(audio)
-                        logger.info(f"User said: {text}")
+                        logger.debug(f"User said: {text}")
                         
                         if not text or text.strip() == "":
-                            logger.warning("No speech detected, skipping...")
+                            logger.debug("No speech detected, skipping...")
                             # Resume music if it was playing
                             if music_was_playing:
                                 self.router.os_commands._resume_music_if_paused()
@@ -206,11 +224,11 @@ class DollarAssistant:
                             # If the text is very short and matches wake word, ignore it
                             if len(text_clean.split()) <= 3:
                                 is_wake_word_only = True
-                                logger.info(f"Ignoring wake word phrase in transcription: {text}")
+                                logger.debug(f"Ignoring wake word phrase in transcription: {text}")
                                 break
                     
                     if is_wake_word_only:
-                        logger.info("Transcription was just the wake word, ignoring command")
+                        logger.debug("Transcription was just the wake word, ignoring command")
                         # Resume music if it was playing
                         if music_was_playing:
                             self.router.os_commands._resume_music_if_paused()
@@ -219,14 +237,15 @@ class DollarAssistant:
                     
                     # Check for stop command
                     if any(phrase in text.lower() for phrase in ["stop the agent", "stop dollar", "shut down"]):
-                        logger.info("Stop command received")
+                        logger.debug("Stop command received")
+                        print("🛑 Shutting down...")
                         self.voice.speak("Shutting down. Goodbye.")
                         self.running = False
                         break
                     
                     # Classify intent
                     intent = self.classifier.get_intent(text)
-                    logger.info(f"Detected intent: {intent}")
+                    logger.debug(f"Detected intent: {intent}")
                     
                     # Check if the command is a media control command (don't resume if user wants to pause/stop)
                     intent_name = intent.get('intent', '')
@@ -238,7 +257,7 @@ class DollarAssistant:
                     # Provide feedback
                     if result.get('success'):
                         feedback = result.get('message', 'Done.')
-                        logger.info(f"Command executed: {feedback}")
+                        logger.debug(f"Command executed: {feedback}")
                         self.voice.speak(feedback)
                     else:
                         error_msg = result.get('error', 'Sorry, I could not execute that command.')
@@ -251,6 +270,7 @@ class DollarAssistant:
                     
                     # Show ready state after command completes
                     self.visual.show_ready()
+                    print("👂 Listening for wake word...")
                 
                 # Visual indicator updates are handled via notifications
                 # No need to call update() for notification-based indicator
@@ -259,7 +279,8 @@ class DollarAssistant:
                 time.sleep(0.01)
                 
             except KeyboardInterrupt:
-                logger.info("Keyboard interrupt received")
+                logger.debug("Keyboard interrupt received")
+                print("\n🛑 Shutting down...")
                 self.running = False
                 break
             except Exception as e:
@@ -270,12 +291,12 @@ class DollarAssistant:
     
     def cleanup(self):
         """Clean up resources."""
-        logger.info("Cleaning up resources...")
+        logger.debug("Cleaning up resources...")
         self.wake_word.cleanup()
         self.stt.cleanup()
         self.voice.cleanup()
         self.visual.cleanup()
-        logger.info("Cleanup complete")
+        logger.debug("Cleanup complete")
 
 
 def main():
