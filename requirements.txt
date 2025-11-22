@@ -1,0 +1,32 @@
+# Core dependencies
+numpy>=1.24.0
+PyYAML>=6.0
+
+# Audio processing
+sounddevice>=0.4.6
+pyaudio>=0.2.13
+
+# Speech-to-Text (Whisper)
+openai-whisper>=20231117
+
+# Wake word detection
+pvporcupine>=3.0.0  # Picovoice Porcupine (requires access key)
+# Alternative: torch>=2.0.0, torchaudio>=2.0.0, silero-vad (for Silero VAD)
+
+# Text-to-Speech
+pyttsx3>=2.90
+# Alternative: TTS>=0.20.0 (for Coqui TTS)
+
+# Intent classification
+fuzzywuzzy>=0.18.0
+python-Levenshtein>=0.21.0  # Speeds up fuzzywuzzy
+
+# System information
+psutil>=5.9.0
+
+# Optional: For better audio resampling
+scipy>=1.10.0
+
+# Visual indicator
+pygame>=2.5.0
+
