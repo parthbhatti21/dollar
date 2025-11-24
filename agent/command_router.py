@@ -4,6 +4,7 @@ Command router - routes intents to appropriate OS command handlers.
 """
 
 import logging
+import re
 from os_commands import OSCommands
 
 logger = logging.getLogger(__name__)
@@ -47,6 +48,22 @@ class CommandRouter:
                     # Try to extract from original text
                     app_name = self._extract_app_name(original_text)
                 return self.os_commands.open_app(app_name)
+            
+            elif intent == "youtube_search":
+                search_query = entities.get('search_query', '')
+                if not search_query:
+                    # Try to extract from original text
+                    search_match = re.search(r'search\s+(.+?)\s+(?:on\s+)?(?:youtube|yt)', original_text, re.IGNORECASE)
+                    if search_match:
+                        search_query = search_match.group(1).strip()
+                        search_query = re.sub(r'[.,!?;:]+$', '', search_query).strip()
+                if search_query:
+                    return self.os_commands.open_youtube_search(search_query)
+                else:
+                    return {
+                        "success": False,
+                        "error": "Please specify what to search on YouTube"
+                    }
             
             elif intent == "volume_up":
                 return self.os_commands.volume_up()
@@ -109,6 +126,46 @@ class CommandRouter:
                     # Try to extract from original text
                     song_name = self._extract_song_name(original_text)
                 return self.os_commands.spotify_play_song(song_name)
+            
+            elif intent == "timer_set":
+                duration_seconds = entities.get('duration_seconds', 0)
+                duration_text = entities.get('duration_text', None)
+                if duration_seconds <= 0:
+                    return {
+                        "success": False,
+                        "error": "Please specify a valid timer duration (e.g., 'set timer for 5 minutes')"
+                    }
+                return self.os_commands.set_timer(duration_seconds, duration_text)
+            
+            elif intent == "timer_cancel":
+                return self.os_commands.cancel_timer()
+            
+            elif intent == "reminder_set":
+                time_str = entities.get('time')
+                duration_seconds = entities.get('duration_seconds')
+                duration_text = entities.get('duration_text')
+                task = entities.get('task')
+                return self.os_commands.set_reminder(
+                    time_str=time_str,
+                    duration_seconds=duration_seconds,
+                    duration_text=duration_text,
+                    task=task
+                )
+            
+            elif intent == "reminder_cancel":
+                return self.os_commands.cancel_reminders()
+            
+            elif intent == "alarm_set":
+                time_str = entities.get('time')
+                if not time_str:
+                    return {
+                        "success": False,
+                        "error": "Please specify a time for the alarm (e.g., 'set alarm for 7 AM')"
+                    }
+                return self.os_commands.set_alarm(time_str)
+            
+            elif intent == "alarm_cancel":
+                return self.os_commands.cancel_alarms()
             
             elif intent == "greeting":
                 import random

@@ -40,11 +40,12 @@ class WakeWordDetector:
         try:
             import pvporcupine
             
-            access_key = self.config.get('wake_word', {}).get('porcupine_access_key', '')
+            access_key = self.config.get('wake_word', {}).get('porcupine_access_key', '').strip()
             keyword_path = self.config.get('wake_word', {}).get('keyword_path', None)
             
-            if not access_key:
-                logger.warning("No Porcupine access key provided. Using fallback method.")
+            # Check if access key is empty or invalid (contains non-ASCII characters that aren't valid)
+            if not access_key or len(access_key) < 10:  # Valid keys are typically long strings
+                logger.debug("No valid Porcupine access key provided. Using fallback method.")
                 self._init_simple_vad()
                 return
             
@@ -110,10 +111,15 @@ class WakeWordDetector:
             self.method = 'porcupine'
             
         except ImportError:
-            logger.warning("pvporcupine not available, falling back to simple VAD")
+            logger.debug("pvporcupine not available, falling back to simple VAD")
             self._init_simple_vad()
         except Exception as e:
-            logger.error(f"Failed to initialize Porcupine: {e}")
+            # Check if it's an access key error
+            error_str = str(e).lower()
+            if 'accesskey' in error_str or 'access key' in error_str or '0000006f' in error_str:
+                logger.debug("Invalid Porcupine access key. Using fallback method.")
+            else:
+                logger.debug(f"Porcupine initialization failed: {e}")
             self._init_simple_vad()
     
     def _init_silero(self):

@@ -9,7 +9,11 @@ import platform
 import subprocess
 import shutil
 import time
-from datetime import datetime
+import threading
+import uuid
+import re
+import urllib.parse
+from datetime import datetime, timedelta
 from typing import Dict
 
 logger = logging.getLogger(__name__)
@@ -26,6 +30,8 @@ class OSCommands:
         """
         self.config = config
         self.platform = platform.system().lower()
+        self.active_timer = None  # Store active timer thread
+        self.timer_cancelled = False  # Flag to cancel timer
         logger.info(f"Initialized OS commands for platform: {self.platform}")
     
     def _run_command(self, command: list, shell: bool = False) -> Dict[str, any]:
@@ -126,6 +132,10 @@ class OSCommands:
         app_name = re.sub(r'[.,!?;:]+$', '', app_name).strip()
         
         if self.platform == "darwin":  # macOS
+            # Special handling for YouTube - open in Safari
+            if app_name in ["youtube", "yt"]:
+                return self._open_youtube_in_safari()
+            
             # Map common names to macOS app names
             app_mapping = {
                 "chrome": "Google Chrome",
@@ -169,12 +179,176 @@ class OSCommands:
                 "error": f"Open app not supported on platform: {self.platform}"
             }
     
+    def _open_youtube_in_safari(self) -> Dict[str, any]:
+        """
+        Open YouTube in Safari. If Safari is already open, opens a new tab.
+        If Safari is not open, opens Safari first.
+        """
+        if self.platform != "darwin":
+            return {
+                "success": False,
+                "error": "YouTube in Safari is only supported on macOS"
+            }
+        
+        try:
+            # Check if Safari is running
+            check_script = '''
+            tell application "System Events"
+                set safariRunning to (name of processes) contains "Safari"
+            end tell
+            return safariRunning
+            '''
+            
+            result = self._run_command(['osascript', '-e', check_script])
+            safari_running = result.get('output', '').strip() == 'true'
+            
+            if not safari_running:
+                # Open Safari first
+                self._run_command(['open', '-a', 'Safari'])
+                time.sleep(1)  # Wait for Safari to open
+            
+            # Now open new tab and navigate to YouTube
+            # Cmd+T opens new tab (address bar is automatically focused in new tabs)
+            # Then type youtube.com and press Enter
+            script = '''
+            tell application "Safari"
+                activate
+            end tell
+            delay 0.5
+            tell application "System Events"
+                tell process "Safari"
+                    -- Open new tab (Cmd+T) - address bar is auto-focused
+                    key code 17 using {{command down}}
+                    delay 0.4
+                    -- Type the URL (address bar is already focused)
+                    keystroke "youtube.com"
+                    delay 0.3
+                    -- Press Enter to navigate
+                    key code 36
+                end tell
+            end tell
+            '''
+            
+            result = self._run_command(['osascript', '-e', script])
+            if result.get('success'):
+                return {
+                    "success": True,
+                    "message": "Opened YouTube in Safari"
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": f"Failed to open YouTube: {result.get('error', 'Unknown error')}"
+                }
+        
+        except Exception as e:
+            logger.error(f"Error opening YouTube in Safari: {e}", exc_info=True)
+            return {
+                "success": False,
+                "error": f"Failed to open YouTube: {str(e)}"
+            }
+    
+    def open_youtube_search(self, search_query: str) -> Dict[str, any]:
+        """
+        Search YouTube in Safari. Opens Safari (if needed), creates a new tab,
+        and navigates to YouTube search results.
+        
+        Args:
+            search_query: The search query to look up on YouTube
+        """
+        if self.platform != "darwin":
+            return {
+                "success": False,
+                "error": "YouTube search in Safari is only supported on macOS"
+            }
+        
+        if not search_query:
+            return {
+                "success": False,
+                "error": "No search query provided"
+            }
+        
+        try:
+            # URL encode the search query
+            encoded_query = urllib.parse.quote_plus(search_query)
+            youtube_url = f"https://www.youtube.com/results?search_query={encoded_query}"
+            
+            # Check if Safari is running
+            check_script = '''
+            tell application "System Events"
+                set safariRunning to (name of processes) contains "Safari"
+            end tell
+            return safariRunning
+            '''
+            
+            result = self._run_command(['osascript', '-e', check_script])
+            safari_running = result.get('output', '').strip() == 'true'
+            
+            if not safari_running:
+                # Open Safari first
+                self._run_command(['open', '-a', 'Safari'])
+                time.sleep(1)  # Wait for Safari to open
+            
+            # Now open new tab and navigate to YouTube search
+            script = f'''
+            tell application "Safari"
+                activate
+            end tell
+            delay 0.5
+            tell application "System Events"
+                tell process "Safari"
+                    -- Open new tab (Cmd+T) - address bar is auto-focused
+                    key code 17 using {{command down}}
+                    delay 0.4
+                    -- Type the YouTube search URL (address bar is already focused)
+                    keystroke "{youtube_url}"
+                    delay 0.3
+                    -- Press Enter to navigate
+                    key code 36
+                end tell
+            end tell
+            '''
+            
+            result = self._run_command(['osascript', '-e', script])
+            if result.get('success'):
+                return {
+                    "success": True,
+                    "message": f"Searching YouTube for '{search_query}'"
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": f"Failed to search YouTube: {result.get('error', 'Unknown error')}"
+                }
+        
+        except Exception as e:
+            logger.error(f"Error searching YouTube: {e}", exc_info=True)
+            return {
+                "success": False,
+                "error": f"Failed to search YouTube: {str(e)}"
+            }
+    
     def volume_up(self) -> Dict[str, any]:
         """Increase system volume."""
         if self.platform == "darwin":  # macOS
-            return self._run_command(
-                ['osascript', '-e', 'set volume output volume ((output volume of (get volume settings)) + 10)']
+            # Get current volume first, then increase (capped at 100)
+            vol_result = self._run_command(
+                ['osascript', '-e', 'output volume of (get volume settings)']
             )
+            current_vol = 50  # Default
+            if vol_result.get('success'):
+                try:
+                    current_vol = int(vol_result.get('output', '50'))
+                except:
+                    pass
+            
+            new_vol = min(100, current_vol + 10)
+            result = self._run_command(
+                ['osascript', '-e', f'set volume output volume {new_vol}']
+            )
+            if result.get('success'):
+                result['message'] = f"Volume increased to {new_vol}%"
+            return result
         elif self.platform == "windows":
             # Use nircmd if available, or PowerShell
             if shutil.which("nircmd"):
@@ -203,9 +377,24 @@ class OSCommands:
     def volume_down(self) -> Dict[str, any]:
         """Decrease system volume."""
         if self.platform == "darwin":  # macOS
-            return self._run_command(
-                ['osascript', '-e', 'set volume output volume ((output volume of (get volume settings)) - 10)']
+            # Get current volume first, then decrease (capped at 0)
+            vol_result = self._run_command(
+                ['osascript', '-e', 'output volume of (get volume settings)']
             )
+            current_vol = 50  # Default
+            if vol_result.get('success'):
+                try:
+                    current_vol = int(vol_result.get('output', '50'))
+                except:
+                    pass
+            
+            new_vol = max(0, current_vol - 10)
+            result = self._run_command(
+                ['osascript', '-e', f'set volume output volume {new_vol}']
+            )
+            if result.get('success'):
+                result['message'] = f"Volume decreased to {new_vol}%"
+            return result
         elif self.platform == "windows":
             if shutil.which("nircmd"):
                 return self._run_command(['nircmd', 'changesysvolume', '-2000'])
@@ -238,9 +427,12 @@ class OSCommands:
         volume = max(0, min(100, volume))
         
         if self.platform == "darwin":  # macOS
-            return self._run_command(
+            result = self._run_command(
                 ['osascript', '-e', f'set volume output volume {volume}']
             )
+            if result.get('success'):
+                result['message'] = f"Volume set to {volume}%"
+            return result
         elif self.platform == "windows":
             if shutil.which("nircmd"):
                 # nircmd uses 0-65535 range
@@ -1200,4 +1392,430 @@ class OSCommands:
                 "success": False,
                 "error": f"Spotify control not supported on platform: {self.platform}"
             }
+    
+    def _timer_notification(self, message: str):
+        """Show timer notification using platform-specific method."""
+        if self.platform == "darwin":  # macOS
+            script = f'''
+            display notification "{message}" with title "Timer" sound name "Glass"
+            '''
+            self._run_command(['osascript', '-e', script])
+        elif self.platform == "windows":
+            # PowerShell toast notification
+            ps_cmd = f'''
+            [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null
+            $template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
+            $textNodes = $template.GetElementsByTagName("text")
+            $textNodes.Item(0).AppendChild($template.CreateTextNode("Timer")) | Out-Null
+            $textNodes.Item(1).AppendChild($template.CreateTextNode("{message}")) | Out-Null
+            $toast = [Windows.UI.Notifications.ToastNotification]::new($template)
+            [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("Dollar Assistant").Show($toast)
+            '''
+            self._run_command(['powershell', '-Command', ps_cmd])
+        elif self.platform == "linux":
+            # Use notify-send
+            self._run_command(['notify-send', 'Timer', message, '-i', 'clock'])
+    
+    def _timer_thread(self, duration_seconds: int, duration_text: str):
+        """Background thread that waits for timer and shows notification."""
+        self.timer_cancelled = False
+        start_time = time.time()
+        
+        while time.time() - start_time < duration_seconds:
+            if self.timer_cancelled:
+                return
+            time.sleep(0.5)  # Check every 0.5 seconds
+        
+        if not self.timer_cancelled:
+            # Timer expired
+            message = f"Timer for {duration_text} is complete!"
+            self._timer_notification(message)
+            self.active_timer = None
+    
+    def set_timer(self, duration_seconds: int, duration_text: str = None) -> Dict[str, any]:
+        """
+        Set a timer for specified duration.
+        
+        Args:
+            duration_seconds: Duration in seconds
+            duration_text: Human-readable duration (e.g., "5 minutes")
+        """
+        if duration_seconds <= 0:
+            return {
+                "success": False,
+                "error": "Timer duration must be greater than 0"
+            }
+        
+        # Cancel existing timer if any
+        if self.active_timer and self.active_timer.is_alive():
+            self.timer_cancelled = True
+            time.sleep(0.5)  # Give it a moment to cancel
+        
+        # Create new timer thread
+        if duration_text is None:
+            if duration_seconds < 60:
+                duration_text = f"{duration_seconds} second{'s' if duration_seconds != 1 else ''}"
+            elif duration_seconds < 3600:
+                minutes = duration_seconds // 60
+                duration_text = f"{minutes} minute{'s' if minutes != 1 else ''}"
+            else:
+                hours = duration_seconds // 3600
+                duration_text = f"{hours} hour{'s' if hours != 1 else ''}"
+        
+        self.active_timer = threading.Thread(
+            target=self._timer_thread,
+            args=(duration_seconds, duration_text),
+            daemon=True
+        )
+        self.active_timer.start()
+        
+        return {
+            "success": True,
+            "message": f"Timer set for {duration_text}"
+        }
+    
+    def cancel_timer(self) -> Dict[str, any]:
+        """Cancel the active timer if one is running."""
+        if self.active_timer and self.active_timer.is_alive():
+            self.timer_cancelled = True
+            time.sleep(0.5)  # Give it a moment to cancel
+            self.active_timer = None
+            return {
+                "success": True,
+                "message": "Timer cancelled"
+            }
+        else:
+            return {
+                "success": False,
+                "error": "No active timer to cancel"
+            }
+    
+    def _parse_time(self, time_str: str) -> Dict[str, any]:
+        """
+        Parse time string to calculate seconds until that time.
+        Supports formats: "3 PM", "7:30 AM", "6 o'clock", "14:30"
+        
+        Returns:
+            dict with 'success', 'seconds_until', 'time_str' keys
+        """
+        time_str = time_str.strip().lower()
+        now = datetime.now()
+        
+        # Pattern 1: "3 PM" or "3pm" or "3 o'clock"
+        match1 = re.search(r'(\d{1,2})\s*(?:o\'?clock|am|pm|a\.m\.|p\.m\.)?', time_str)
+        if match1:
+            hour = int(match1.group(1))
+            is_pm = 'pm' in time_str or 'p.m.' in time_str
+            is_am = 'am' in time_str or 'a.m.' in time_str
+            
+            if is_pm and hour != 12:
+                hour += 12
+            elif is_am and hour == 12:
+                hour = 0
+            
+            target_time = now.replace(hour=hour, minute=0, second=0, microsecond=0)
+            
+            # If time has passed today, set for tomorrow
+            if target_time <= now:
+                target_time += timedelta(days=1)
+            
+            seconds_until = (target_time - now).total_seconds()
+            return {
+                "success": True,
+                "seconds_until": int(seconds_until),
+                "time_str": target_time.strftime("%I:%M %p")
+            }
+        
+        # Pattern 2: "7:30 AM" or "14:30"
+        match2 = re.search(r'(\d{1,2}):(\d{2})\s*(am|pm|a\.m\.|p\.m\.)?', time_str)
+        if match2:
+            hour = int(match2.group(1))
+            minute = int(match2.group(2))
+            period = match2.group(3) if match2.group(3) else None
+            
+            if period:
+                is_pm = 'pm' in period.lower() or 'p.m.' in period.lower()
+                if is_pm and hour != 12:
+                    hour += 12
+                elif not is_pm and hour == 12:
+                    hour = 0
+            else:
+                # 24-hour format
+                if hour >= 24:
+                    return {"success": False, "error": "Invalid hour"}
+            
+            target_time = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            
+            # If time has passed today, set for tomorrow
+            if target_time <= now:
+                target_time += timedelta(days=1)
+            
+            seconds_until = (target_time - now).total_seconds()
+            return {
+                "success": True,
+                "seconds_until": int(seconds_until),
+                "time_str": target_time.strftime("%I:%M %p")
+            }
+        
+        return {"success": False, "error": f"Could not parse time: {time_str}"}
+    
+    
+    def set_reminder(self, time_str: str = None, duration_seconds: int = None, duration_text: str = None, task: str = None) -> Dict[str, any]:
+        """
+        Set a reminder in the system Reminders app.
+        
+        Args:
+            time_str: Absolute time (e.g., "3 PM", "7:30 AM")
+            duration_seconds: Relative duration in seconds
+            duration_text: Human-readable duration (e.g., "30 minutes")
+            task: Optional task description
+        """
+        if self.platform == "darwin":  # macOS
+            # Calculate reminder time
+            if time_str:
+                time_result = self._parse_time(time_str)
+                if not time_result.get('success'):
+                    return {
+                        "success": False,
+                        "error": time_result.get('error', 'Invalid time format')
+                    }
+                target_datetime = datetime.now() + timedelta(seconds=time_result['seconds_until'])
+                display_time = time_result['time_str']
+            elif duration_seconds:
+                if duration_seconds <= 0:
+                    return {
+                        "success": False,
+                        "error": "Reminder duration must be greater than 0"
+                    }
+                target_datetime = datetime.now() + timedelta(seconds=duration_seconds)
+                if duration_text:
+                    display_time = duration_text
+                else:
+                    if duration_seconds < 60:
+                        display_time = f"{duration_seconds} second{'s' if duration_seconds != 1 else ''}"
+                    elif duration_seconds < 3600:
+                        minutes = duration_seconds // 60
+                        display_time = f"{minutes} minute{'s' if minutes != 1 else ''}"
+                    else:
+                        hours = duration_seconds // 3600
+                        display_time = f"{hours} hour{'s' if hours != 1 else ''}"
+            else:
+                return {
+                    "success": False,
+                    "error": "Please specify either a time or duration for the reminder"
+                }
+            
+            # Calculate seconds until target time
+            seconds_until = (target_datetime - datetime.now()).total_seconds()
+            
+            reminder_name = task if task else "Reminder"
+            # Escape quotes and backslashes in reminder name
+            reminder_name = reminder_name.replace('\\', '\\\\').replace('"', '\\"')
+            
+            # Create reminder in Reminders app using date calculation
+            # Calculate the target date by adding seconds to current date
+            script = f'''
+            tell application "Reminders"
+                set newReminder to make new reminder
+                set name of newReminder to "{reminder_name}"
+                set targetDate to (current date) + ({int(seconds_until)} * 1)
+                set remind me date of newReminder to targetDate
+                set body of newReminder to "Set by Dollar Assistant"
+            end tell
+            '''
+            
+            result = self._run_command(['osascript', '-e', script])
+            if result.get('success'):
+                task_text = f" '{task}'" if task else ""
+                return {
+                    "success": True,
+                    "message": f"Reminder{task_text} set for {display_time} in Reminders app"
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": f"Failed to create reminder: {result.get('error', 'Unknown error')}"
+                }
+        
+        elif self.platform == "windows":
+            # Use PowerShell to create calendar event/reminder
+            if time_str:
+                time_result = self._parse_time(time_str)
+                if not time_result.get('success'):
+                    return {
+                        "success": False,
+                        "error": time_result.get('error', 'Invalid time format')
+                    }
+                target_datetime = datetime.now() + timedelta(seconds=time_result['seconds_until'])
+                display_time = time_result['time_str']
+            elif duration_seconds:
+                target_datetime = datetime.now() + timedelta(seconds=duration_seconds)
+                display_time = duration_text or f"{duration_seconds} seconds"
+            else:
+                return {
+                    "success": False,
+                    "error": "Please specify either a time or duration for the reminder"
+                }
+            
+            reminder_name = task if task else "Reminder"
+            date_str = target_datetime.strftime("%Y-%m-%d %H:%M:%S")
+            
+            ps_cmd = f'''
+            $reminder = New-Object -ComObject Outlook.Application
+            $reminder.CreateItem(1) | ForEach-Object {{
+                $_.Subject = "{reminder_name}"
+                $_.Start = [DateTime]::Parse("{date_str}")
+                $_.ReminderSet = $true
+                $_.Save()
+            }}
+            '''
+            result = self._run_command(['powershell', '-Command', ps_cmd])
+            if result.get('success'):
+                return {
+                    "success": True,
+                    "message": f"Reminder set for {display_time}"
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": "Failed to create reminder. Make sure Outlook is installed."
+                }
+        
+        elif self.platform == "linux":
+            # Use calendar/reminder tools (e.g., evolution, thunderbird, or at command)
+            if duration_seconds:
+                # Use 'at' command for relative time
+                reminder_name = task if task else "Reminder"
+                at_time = f"now + {duration_seconds // 60} minutes"
+                cmd = f'echo "notify-send \\"Reminder\\" \\"{reminder_name}\\" -i reminder" | at {at_time}'
+                result = self._run_command(['bash', '-c', cmd])
+            else:
+                return {
+                    "success": False,
+                    "error": "Linux reminders require duration. Absolute time not yet supported."
+                }
+            
+            if result.get('success'):
+                return {
+                    "success": True,
+                    "message": f"Reminder set for {duration_text or f'{duration_seconds} seconds'}"
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": "Failed to create reminder. Install 'at' package: sudo apt-get install at"
+                }
+        
+        else:
+            return {
+                "success": False,
+                "error": f"Reminders not supported on platform: {self.platform}"
+            }
+    
+    def cancel_reminders(self) -> Dict[str, any]:
+        """Cancel reminders - note: system reminders must be cancelled manually in the app."""
+        return {
+            "success": True,
+            "message": "Please cancel reminders manually in the Reminders app"
+        }
+    
+    def set_alarm(self, time_str: str) -> Dict[str, any]:
+        """
+        Set an alarm in the system Clock app.
+        
+        Args:
+            time_str: Time string (e.g., "7 AM", "6:30 AM", "14:30")
+        """
+        time_result = self._parse_time(time_str)
+        if not time_result.get('success'):
+            return {
+                "success": False,
+                "error": time_result.get('error', 'Invalid time format')
+            }
+        
+        target_datetime = datetime.now() + timedelta(seconds=time_result['seconds_until'])
+        display_time = time_result['time_str']
+        
+        if self.platform == "darwin":  # macOS
+            # Create alarm in Clock app using Calendar event (Clock app doesn't have direct AppleScript support)
+            # Alternative: Use Calendar app to create an event that acts as an alarm
+            seconds_until = (target_datetime - datetime.now()).total_seconds()
+            
+            script = f'''
+            tell application "Calendar"
+                tell calendar "Home"
+                    set targetDate to (current date) + ({int(seconds_until)} * 1)
+                    set newEvent to make new event at end with properties {{summary:"Alarm - Wake Up", start date:targetDate, allday event:false}}
+                end tell
+            end tell
+            '''
+            
+            result = self._run_command(['osascript', '-e', script])
+            if result.get('success'):
+                return {
+                    "success": True,
+                    "message": f"Alarm set for {display_time} in Calendar app"
+                }
+            else:
+                # Fallback: Try to open Clock app (user can set manually)
+                self._run_command(['open', '-a', 'Clock'])
+                return {
+                    "success": True,
+                    "message": f"Opened Clock app. Please set alarm for {display_time} manually"
+                }
+        
+        elif self.platform == "windows":
+            # Use PowerShell to create calendar event with reminder
+            date_str = target_datetime.strftime("%Y-%m-%d %H:%M:%S")
+            
+            ps_cmd = f'''
+            $alarm = New-Object -ComObject Outlook.Application
+            $alarm.CreateItem(1) | ForEach-Object {{
+                $_.Subject = "Alarm - Wake Up"
+                $_.Start = [DateTime]::Parse("{date_str}")
+                $_.ReminderSet = $true
+                $_.ReminderMinutesBeforeStart = 0
+                $_.Save()
+            }}
+            '''
+            result = self._run_command(['powershell', '-Command', ps_cmd])
+            if result.get('success'):
+                return {
+                    "success": True,
+                    "message": f"Alarm set for {display_time}"
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": "Failed to create alarm. Make sure Outlook is installed."
+                }
+        
+        elif self.platform == "linux":
+            # Use at command or calendar tools
+            date_str = target_datetime.strftime("%H:%M %Y-%m-%d")
+            cmd = f'echo "notify-send \\"Alarm\\" \\"Time to wake up!\\" -i alarm-clock --urgency=critical -a Alarm" | at {date_str}'
+            result = self._run_command(['bash', '-c', cmd])
+            if result.get('success'):
+                return {
+                    "success": True,
+                    "message": f"Alarm set for {display_time}"
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": "Failed to create alarm. Install 'at' package: sudo apt-get install at"
+                }
+        
+        else:
+            return {
+                "success": False,
+                "error": f"Alarms not supported on platform: {self.platform}"
+            }
+    
+    def cancel_alarms(self) -> Dict[str, any]:
+        """Cancel alarms - note: system alarms must be cancelled manually in the app."""
+        return {
+            "success": True,
+            "message": "Please cancel alarms manually in the Clock/Calendar app"
+        }
 

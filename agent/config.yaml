@@ -25,5 +25,5 @@ tts:
 # Audio settings
 audio:
   sample_rate: 16000  # Audio sample rate (Hz)
-  record_duration: 3  # Maximum recording duration after wake word (seconds)
+  record_duration: 5  # Maximum recording duration after wake word (seconds)
 

@@ -73,7 +73,7 @@ class DollarAssistant:
         logger.debug("Received shutdown signal, stopping assistant...")
         self.running = False
     
-    def record_user_speech(self, duration=3):
+    def record_user_speech(self, duration=5):
         """
         Record user speech after wake word detection.
         

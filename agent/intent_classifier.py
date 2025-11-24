@@ -48,6 +48,10 @@ class IntentClassifier:
                 "open", "launch", "start app", "open app", "run", "start",
                 "open application", "launch application", "open the app"
             ],
+            "youtube_search": [
+                "search on youtube", "youtube search", "search youtube",
+                "search on yt", "yt search"
+            ],
             "volume_up": [
                 "volume up", "increase volume", "turn up volume", "louder",
                 "raise volume", "volume higher"
@@ -133,6 +137,30 @@ class IntentClassifier:
             "goodbye": [
                 "goodbye", "bye", "see you", "see you later", "farewell"
             ],
+            "timer_set": [
+                "set timer", "timer", "start timer", "create timer", "set a timer",
+                "timer for", "timer of", "countdown", "set countdown"
+            ],
+            "timer_cancel": [
+                "cancel timer", "stop timer", "clear timer", "remove timer",
+                "delete timer", "turn off timer"
+            ],
+            "reminder_set": [
+                "remind me", "set reminder", "create reminder", "reminder",
+                "remind me to", "set a reminder", "remind me at", "remind me in"
+            ],
+            "reminder_cancel": [
+                "cancel reminder", "delete reminder", "remove reminder",
+                "clear reminder", "cancel all reminders"
+            ],
+            "alarm_set": [
+                "set alarm", "create alarm", "alarm", "wake me up",
+                "set alarm for", "alarm for", "wake me up at", "set wake up"
+            ],
+            "alarm_cancel": [
+                "cancel alarm", "delete alarm", "remove alarm",
+                "clear alarm", "turn off alarm", "cancel all alarms"
+            ],
             "unknown": []  # Fallback intent
         }
     
@@ -167,10 +195,12 @@ class IntentClassifier:
         # This handles cases where "spotify" is mispronounced as "45" or similar
         spotify_keywords = r'(?:spotify|spot\s*if\s*i|45|spot\s*if\s*eye)'
         
-        # Check regex patterns FIRST (they handle complex Spotify patterns)
+        # Check regex patterns FIRST (they handle complex patterns like reminders, alarms, Spotify, YouTube search)
         regex_match = self._regex_match(text_lower)
-        if regex_match and regex_match.get('intent') == 'spotify_play':
-            return regex_match
+        if regex_match:
+            # Return immediately for reminder_set, alarm_set, timer_set, youtube_search, etc.
+            if regex_match.get('intent') in ['reminder_set', 'reminder_cancel', 'alarm_set', 'alarm_cancel', 'timer_set', 'timer_cancel', 'spotify_play', 'youtube_search']:
+                return regex_match
         
         # Also check if text contains Spotify keywords and "play"
         if re.search(spotify_keywords, text_lower) and re.search(r'\bplay\b', text_lower):
@@ -385,6 +415,171 @@ class IntentClassifier:
                 "entities": {"volume": min(100, max(0, volume))}
             }
         
+        # Timer set pattern: "set timer for X minutes/seconds/hours" or "timer X"
+        timer_match = re.search(
+            r'(?:set\s+)?(?:a\s+)?timer\s+(?:for\s+)?(\d+)\s*(minute|minutes|min|second|seconds|sec|hour|hours|hr|hrs)',
+            text,
+            re.IGNORECASE
+        )
+        if timer_match:
+            duration_value = int(timer_match.group(1))
+            unit = timer_match.group(2).lower()
+            
+            # Convert to seconds
+            if unit.startswith('hour') or unit.startswith('hr'):
+                duration_seconds = duration_value * 3600
+            elif unit.startswith('minute') or unit.startswith('min'):
+                duration_seconds = duration_value * 60
+            else:  # seconds
+                duration_seconds = duration_value
+            
+            return {
+                "intent": "timer_set",
+                "entities": {"duration_seconds": duration_seconds, "duration_text": f"{duration_value} {unit}"}
+            }
+        
+        # Timer cancel pattern
+        if re.search(r'(?:cancel|stop|clear|remove|delete|turn\s+off)\s+(?:the\s+)?timer', text, re.IGNORECASE):
+            return {
+                "intent": "timer_cancel",
+                "entities": {}
+            }
+        
+        # Reminder set pattern - handle "remind me at [time]" or "remind me in [duration]" or "remind me to [task] at [time]"
+        # Support both numeric (2, 3) and word numbers (two, three)
+        word_to_number = {
+            'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
+            'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10,
+            'eleven': 11, 'twelve': 12, 'thirteen': 13, 'fourteen': 14, 'fifteen': 15,
+            'sixteen': 16, 'seventeen': 17, 'eighteen': 18, 'nineteen': 19, 'twenty': 20,
+            'thirty': 30, 'forty': 40, 'fifty': 50, 'sixty': 60
+        }
+        
+        # Try pattern 1: "remind me to [task] at/in [time/duration]"
+        reminder_match1 = re.search(
+            r'remind\s+me\s+to\s+(.+?)\s+(?:at\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm|AM|PM|o\'?clock)?)|in\s+(\d+|\w+)\s*(minute|minutes|min|second|seconds|sec|hour|hours|hr|hrs))',
+            text,
+            re.IGNORECASE
+        )
+        # Try pattern 2: "remind me in [duration] to [task]" (check this BEFORE pattern 3)
+        reminder_match2 = re.search(
+            r'remind\s+me\s+in\s+(\d+|\w+)\s*(minute|minutes|min|second|seconds|sec|hour|hours|hr|hrs)\s+to\s+(.+)',
+            text,
+            re.IGNORECASE
+        )
+        # Try pattern 3: "remind me at [time]" or "remind me in [duration]" (no task, only if pattern 2 didn't match)
+        reminder_match3 = None
+        if not reminder_match2:
+            reminder_match3 = re.search(
+                r'remind\s+me\s+(?:at\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm|AM|PM|o\'?clock)?)|in\s+(\d+|\w+)\s*(minute|minutes|min|second|seconds|sec|hour|hours|hr|hrs))',
+                text,
+                re.IGNORECASE
+            )
+        
+        reminder_match = reminder_match1 or reminder_match2 or reminder_match3
+        if reminder_match:
+            task = None
+            absolute_time = None
+            relative_duration = None
+            relative_unit = None
+            
+            if reminder_match1:
+                # Pattern 1: "remind me to [task] at/in [time/duration]"
+                task = reminder_match1.group(1).strip() if reminder_match1.group(1) else None
+                absolute_time = reminder_match1.group(2) if reminder_match1.group(2) else None
+                relative_duration = reminder_match1.group(3) if reminder_match1.group(3) else None
+                relative_unit = reminder_match1.group(4) if reminder_match1.group(4) else None
+            elif reminder_match2:
+                # Pattern 2: "remind me in [duration] to [task]"
+                relative_duration = reminder_match2.group(1) if reminder_match2.group(1) else None
+                relative_unit = reminder_match2.group(2) if reminder_match2.group(2) else None
+                task = reminder_match2.group(3).strip() if reminder_match2.group(3) else None
+            elif reminder_match3:
+                # Pattern 3: "remind me at [time]" or "remind me in [duration]" (no task)
+                absolute_time = reminder_match3.group(1) if reminder_match3.group(1) else None
+                relative_duration = reminder_match3.group(2) if reminder_match3.group(2) else None
+                relative_unit = reminder_match3.group(3) if reminder_match3.group(3) else None
+            
+            entities = {}
+            if task:
+                entities["task"] = task.strip()
+            if absolute_time:
+                entities["time"] = absolute_time.strip()
+                entities["type"] = "absolute"
+            elif relative_duration and relative_unit:
+                # Convert word numbers to digits
+                duration_str = relative_duration.lower().strip()
+                if duration_str.isdigit():
+                    duration_value = int(duration_str)
+                elif duration_str in word_to_number:
+                    duration_value = word_to_number[duration_str]
+                else:
+                    # Try to parse compound numbers like "twenty two"
+                    parts = duration_str.split()
+                    if len(parts) == 2 and parts[0] in word_to_number and parts[1] in word_to_number:
+                        duration_value = word_to_number[parts[0]] + word_to_number[parts[1]]
+                    else:
+                        # Default to 1 if we can't parse
+                        duration_value = 1
+                
+                unit = relative_unit.lower()
+                if unit.startswith('hour') or unit.startswith('hr'):
+                    duration_seconds = duration_value * 3600
+                elif unit.startswith('minute') or unit.startswith('min'):
+                    duration_seconds = duration_value * 60
+                else:
+                    duration_seconds = duration_value
+                entities["duration_seconds"] = duration_seconds
+                entities["duration_text"] = f"{duration_value} {unit}"
+                entities["type"] = "relative"
+            
+            return {
+                "intent": "reminder_set",
+                "entities": entities
+            }
+        
+        # Alarm set pattern - handle "set alarm for [time]" or "alarm for [time]" or "wake me up at [time]"
+        alarm_match = re.search(
+            r'(?:set\s+)?(?:alarm|wake\s+me\s+up)\s+(?:for\s+|at\s+)?(\d{1,2}(?::\d{2})?\s*(?:am|pm|AM|PM|o\'?clock)?)',
+            text,
+            re.IGNORECASE
+        )
+        if alarm_match:
+            time_str = alarm_match.group(1).strip()
+            return {
+                "intent": "alarm_set",
+                "entities": {"time": time_str, "type": "absolute"}
+            }
+        
+        # Reminder/Alarm cancel patterns
+        if re.search(r'(?:cancel|delete|remove|clear|turn\s+off)\s+(?:the\s+)?(?:all\s+)?(?:reminder|alarm)', text, re.IGNORECASE):
+            if re.search(r'alarm', text, re.IGNORECASE):
+                return {
+                    "intent": "alarm_cancel",
+                    "entities": {}
+                }
+            else:
+                return {
+                    "intent": "reminder_cancel",
+                    "entities": {}
+                }
+        
+        # YouTube search pattern: "search [query] on YouTube" or "search [query] on yt"
+        youtube_search_match = re.search(
+            r'search\s+(.+?)\s+(?:on\s+)?(?:youtube|yt)',
+            text,
+            re.IGNORECASE
+        )
+        if youtube_search_match:
+            search_query = youtube_search_match.group(1).strip()
+            # Remove trailing punctuation
+            search_query = re.sub(r'[.,!?;:]+$', '', search_query).strip()
+            if search_query:
+                return {
+                    "intent": "youtube_search",
+                    "entities": {"search_query": search_query}
+                }
+        
         # Open app pattern: "open [app name]" or "launch [app name]"
         app_match = re.search(r'(?:open|launch|start)\s+(?:the\s+)?(.+)', text)
         if app_match:
@@ -420,6 +615,28 @@ class IntentClassifier:
                 volume = int(match.group(1))
                 entities["volume"] = min(100, max(0, volume))
         
+        elif intent == "timer_set":
+            # Extract timer duration
+            match = re.search(
+                r'(?:set\s+)?(?:a\s+)?timer\s+(?:for\s+)?(\d+)\s*(minute|minutes|min|second|seconds|sec|hour|hours|hr|hrs)',
+                text,
+                re.IGNORECASE
+            )
+            if match:
+                duration_value = int(match.group(1))
+                unit = match.group(2).lower()
+                
+                # Convert to seconds
+                if unit.startswith('hour') or unit.startswith('hr'):
+                    duration_seconds = duration_value * 3600
+                elif unit.startswith('minute') or unit.startswith('min'):
+                    duration_seconds = duration_value * 60
+                else:  # seconds
+                    duration_seconds = duration_value
+                
+                entities["duration_seconds"] = duration_seconds
+                entities["duration_text"] = f"{duration_value} {unit}"
+        
         elif intent == "spotify_play":
             # Extract song name - handle various formats and mispronunciations
             song_text = text.lower()
@@ -451,6 +668,62 @@ class IntentClassifier:
             
             if song_text and len(song_text) > 0:
                 entities["song_name"] = song_text
+        
+        elif intent == "reminder_set":
+            # Extract reminder details (fallback if not caught by regex)
+            # Support both numeric and word numbers
+            word_to_number = {
+                'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
+                'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10,
+                'eleven': 11, 'twelve': 12, 'thirteen': 13, 'fourteen': 14, 'fifteen': 15,
+                'sixteen': 16, 'seventeen': 17, 'eighteen': 18, 'nineteen': 19, 'twenty': 20,
+                'thirty': 30, 'forty': 40, 'fifty': 50, 'sixty': 60
+            }
+            
+            match = re.search(
+                r'remind\s+me\s+(?:to\s+(.+?)\s+)?(?:at\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm|AM|PM|o\'?clock)?)|in\s+(\d+|\w+)\s*(minute|minutes|min|hour|hours|hr|hrs))',
+                text,
+                re.IGNORECASE
+            )
+            if match:
+                if match.group(1):
+                    entities["task"] = match.group(1).strip()
+                if match.group(2):
+                    entities["time"] = match.group(2).strip()
+                    entities["type"] = "absolute"
+                elif match.group(3) and match.group(4):
+                    duration_str = match.group(3).lower().strip()
+                    if duration_str.isdigit():
+                        duration_value = int(duration_str)
+                    elif duration_str in word_to_number:
+                        duration_value = word_to_number[duration_str]
+                    else:
+                        # Try compound numbers
+                        parts = duration_str.split()
+                        if len(parts) == 2 and parts[0] in word_to_number and parts[1] in word_to_number:
+                            duration_value = word_to_number[parts[0]] + word_to_number[parts[1]]
+                        else:
+                            duration_value = 1
+                    
+                    unit = match.group(4).lower()
+                    if unit.startswith('hour') or unit.startswith('hr'):
+                        duration_seconds = duration_value * 3600
+                    else:
+                        duration_seconds = duration_value * 60
+                    entities["duration_seconds"] = duration_seconds
+                    entities["duration_text"] = f"{duration_value} {unit}"
+                    entities["type"] = "relative"
+        
+        elif intent == "alarm_set":
+            # Extract alarm time (fallback if not caught by regex)
+            match = re.search(
+                r'(?:set\s+)?(?:alarm|wake\s+me\s+up)\s+(?:for\s+|at\s+)?(\d{1,2}(?::\d{2})?\s*(?:am|pm|AM|PM|o\'?clock)?)',
+                text,
+                re.IGNORECASE
+            )
+            if match:
+                entities["time"] = match.group(1).strip()
+                entities["type"] = "absolute"
         
         return entities
     

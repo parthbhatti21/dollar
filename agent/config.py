@@ -44,7 +44,7 @@ def load_config(config_path=None):
         },
         'audio': {
             'sample_rate': 16000,
-            'record_duration': 3
+            'record_duration': 5
         }
     }
     

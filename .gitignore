@@ -21,7 +21,7 @@ ENV/
 agent.log
 
 # Config (if contains secrets)
-# config.yaml
+config.yaml
 
 # OS
 .DS_Store

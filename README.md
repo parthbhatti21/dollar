@@ -100,11 +100,7 @@ python main.py
 The assistant will:
 1. Initialize all components
 2. Say "Dollar assistant is ready."
-<<<<<<< HEAD
-3. Start listening for "hey dollar" (or your configured wake word)
-=======
-3. Start listening for "hey dollar jack"
->>>>>>> 0546f24de41d75a20e976779fb47f19c8e9f80d4
+3. Start listening for "hey dollar jack" (or your configured wake word)
 4. Process commands when wake word is detected
 
 ### Run in Background (Optional)
