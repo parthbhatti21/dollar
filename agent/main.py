@@ -48,10 +48,17 @@ logger = logging.getLogger(__name__)
 class DollarAssistant:
     """Main assistant class that orchestrates all components."""
     
-    def __init__(self):
-        """Initialize all components."""
+    def __init__(self, enable_signal_handlers=True, wake_word_callback=None):
+        """
+        Initialize all components.
+        
+        Args:
+            enable_signal_handlers: If False, skip signal handler setup (useful when running in a thread)
+            wake_word_callback: Optional callback function to call when wake word is detected
+        """
         self.config = load_config()
         self.running = True
+        self.wake_word_callback = wake_word_callback
         
         # Initialize components
         logger.debug("Initializing Dollar Assistant...")
@@ -62,9 +69,14 @@ class DollarAssistant:
         self.voice = VoiceOutput(self.config)
         self.visual = VisualIndicator()
         
-        # Setup signal handlers for graceful shutdown
-        signal.signal(signal.SIGINT, self._signal_handler)
-        signal.signal(signal.SIGTERM, self._signal_handler)
+        # Setup signal handlers for graceful shutdown (only in main thread)
+        if enable_signal_handlers:
+            try:
+                signal.signal(signal.SIGINT, self._signal_handler)
+                signal.signal(signal.SIGTERM, self._signal_handler)
+            except ValueError:
+                # Signal handlers can only be set in main thread
+                logger.debug("Signal handlers not set (not in main thread)")
         
         logger.debug("Dollar Assistant initialized successfully")
     
@@ -138,8 +150,15 @@ class DollarAssistant:
             logger.warning("Continuing without TTS - check logs for errors")
         
         logger.debug(f"Wake word method: {self.wake_word.method}")
+        logger.debug(f"Audio stream exists: {self.wake_word.audio_stream is not None}")
+        if self.wake_word.audio_stream and hasattr(self.wake_word.audio_stream, 'is_active'):
+            logger.debug(f"Audio stream active: {self.wake_word.audio_stream.is_active()}")
+        
         print("✅ Dollar Assistant is working")
         print("👂 Listening for wake word...")
+        if not self.wake_word.audio_stream:
+            print("⚠️  WARNING: Audio stream is None - wake word detection will not work!")
+            logger.error("Audio stream is None - wake word detection disabled")
         
         while self.running:
             try:
@@ -153,6 +172,13 @@ class DollarAssistant:
                 if wake_detected:
                     print("🎤 Wake word detected - listening...")
                     logger.debug("Wake word detected!")
+                    
+                    # Call wake word callback if provided (for GUI updates)
+                    if self.wake_word_callback:
+                        try:
+                            self.wake_word_callback()
+                        except Exception as e:
+                            logger.debug(f"Error in wake word callback: {e}")
                     
                     # Show visual indicator - listening
                     self.visual.show_listening()
@@ -211,8 +237,8 @@ class DollarAssistant:
                     # Filter out wake word phrases to prevent false commands
                     text_lower = text.lower().strip()
                     wake_word_phrases = [
-                        "dollar jack", "dollar", "jack", "hey dollar", "hey dollar jack",
-                        "dollar jack", "dollar jack", "dollar jack"
+                        "dollar jack", "hey dollar", "hello dollar",
+                        "dollar", "jack", "hey", "hello"
                     ]
                     
                     # Check if the transcription is just the wake word or very similar
@@ -277,6 +303,11 @@ class DollarAssistant:
                 
                 # Minimal sleep for faster wake word detection (10ms = 100 checks/sec)
                 time.sleep(0.01)
+                
+                # Periodic debug log to confirm loop is running (every 30 seconds)
+                if not hasattr(self, '_last_heartbeat') or time.time() - self._last_heartbeat > 30:
+                    logger.debug("Wake word detection loop running (heartbeat)")
+                    self._last_heartbeat = time.time()
                 
             except KeyboardInterrupt:
                 logger.debug("Keyboard interrupt received")

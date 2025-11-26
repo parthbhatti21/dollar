@@ -65,6 +65,22 @@ class CommandRouter:
                         "error": "Please specify what to search on YouTube"
                     }
             
+            elif intent == "github_search":
+                search_query = entities.get('search_query', None)
+                # Extract search query from "open github [query]" or "search github [query]"
+                if search_query is None:
+                    # Try to extract from original text
+                    github_match = re.search(r'(?:open\s+)?github\s+(.+?)$', original_text, re.IGNORECASE)
+                    if github_match and github_match.group(1):
+                        search_query = github_match.group(1).strip()
+                        search_query = re.sub(r'[.,!?;:]+$', '', search_query).strip()
+                        # Remove common trailing phrases
+                        search_query = re.sub(r'\s+(?:and\s+)?(?:search|find|look|for).*$', '', search_query, flags=re.IGNORECASE).strip()
+                        if not search_query or search_query.lower() in ['and', 'search', 'find', 'look', 'for']:
+                            search_query = None
+                # If still None, it means just "open github" - open search page without query
+                return self.os_commands.open_github_search(search_query)
+            
             elif intent == "volume_up":
                 return self.os_commands.volume_up()
             

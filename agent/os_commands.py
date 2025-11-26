@@ -328,6 +328,90 @@ class OSCommands:
                 "error": f"Failed to search YouTube: {str(e)}"
             }
     
+    def open_github_search(self, search_query: str = None) -> Dict[str, any]:
+        """
+        Open GitHub search page in Safari. Opens Safari (if needed), creates a new tab,
+        and navigates to GitHub search page (github.com/search).
+        
+        Args:
+            search_query: The search query to look up on GitHub (optional, if None opens search page)
+        """
+        if self.platform != "darwin":
+            return {
+                "success": False,
+                "error": "GitHub search in Safari is only supported on macOS"
+            }
+        
+        try:
+            # If no query provided, open GitHub homepage
+            if not search_query:
+                github_url = "https://github.com"
+            else:
+                # URL encode the search query and search on GitHub
+                encoded_query = urllib.parse.quote_plus(search_query)
+                github_url = f"https://github.com/search?q={encoded_query}"
+            
+            # Check if Safari is running
+            check_script = '''
+            tell application "System Events"
+                set safariRunning to (name of processes) contains "Safari"
+            end tell
+            return safariRunning
+            '''
+            
+            result = self._run_command(['osascript', '-e', check_script])
+            safari_running = result.get('output', '').strip() == 'true'
+            
+            if not safari_running:
+                # Open Safari first
+                self._run_command(['open', '-a', 'Safari'])
+                time.sleep(1)  # Wait for Safari to open
+            
+            # Now open new tab and navigate to GitHub search
+            script = f'''
+            tell application "Safari"
+                activate
+            end tell
+            delay 0.5
+            tell application "System Events"
+                tell process "Safari"
+                    -- Open new tab (Cmd+T) - address bar is auto-focused
+                    key code 17 using {{command down}}
+                    delay 0.4
+                    -- Type the GitHub search URL (address bar is already focused)
+                    keystroke "{github_url}"
+                    delay 0.3
+                    -- Press Enter to navigate
+                    key code 36
+                end tell
+            end tell
+            '''
+            
+            result = self._run_command(['osascript', '-e', script])
+            if result.get('success'):
+                if not search_query:
+                    return {
+                        "success": True,
+                        "message": "Opened GitHub in Safari"
+                    }
+                else:
+                    return {
+                        "success": True,
+                        "message": f"Searching GitHub for '{search_query}'"
+                    }
+            else:
+                return {
+                    "success": False,
+                    "error": f"Failed to open GitHub: {result.get('error', 'Unknown error')}"
+                }
+        
+        except Exception as e:
+            logger.error(f"Error opening GitHub: {e}", exc_info=True)
+            return {
+                "success": False,
+                "error": f"Failed to open GitHub: {str(e)}"
+            }
+    
     def volume_up(self) -> Dict[str, any]:
         """Increase system volume."""
         if self.platform == "darwin":  # macOS

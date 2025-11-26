@@ -52,6 +52,10 @@ class IntentClassifier:
                 "search on youtube", "youtube search", "search youtube",
                 "search on yt", "yt search"
             ],
+            "github_search": [
+                "open github", "github", "search github", "search on github",
+                "open github and search", "github search"
+            ],
             "volume_up": [
                 "volume up", "increase volume", "turn up volume", "louder",
                 "raise volume", "volume higher"
@@ -141,6 +145,7 @@ class IntentClassifier:
                 "set timer", "timer", "start timer", "create timer", "set a timer",
                 "timer for", "timer of", "countdown", "set countdown"
             ],
+            
             "timer_cancel": [
                 "cancel timer", "stop timer", "clear timer", "remove timer",
                 "delete timer", "turn off timer"
@@ -198,8 +203,8 @@ class IntentClassifier:
         # Check regex patterns FIRST (they handle complex patterns like reminders, alarms, Spotify, YouTube search)
         regex_match = self._regex_match(text_lower)
         if regex_match:
-            # Return immediately for reminder_set, alarm_set, timer_set, youtube_search, etc.
-            if regex_match.get('intent') in ['reminder_set', 'reminder_cancel', 'alarm_set', 'alarm_cancel', 'timer_set', 'timer_cancel', 'spotify_play', 'youtube_search']:
+            # Return immediately for reminder_set, alarm_set, timer_set, youtube_search, github_search, etc.
+            if regex_match.get('intent') in ['reminder_set', 'reminder_cancel', 'alarm_set', 'alarm_cancel', 'timer_set', 'timer_cancel', 'spotify_play', 'youtube_search', 'github_search']:
                 return regex_match
         
         # Also check if text contains Spotify keywords and "play"
@@ -579,6 +584,62 @@ class IntentClassifier:
                     "intent": "youtube_search",
                     "entities": {"search_query": search_query}
                 }
+        
+        # GitHub search pattern: "open github" or "github" or "search github [query]"
+        # Pattern 1: "open github" (standalone, opens search page)
+        github_match1 = re.search(
+            r'^open\s+github$',
+            text,
+            re.IGNORECASE
+        )
+        # Pattern 2: "open github [query]" - extract the query
+        github_match2 = re.search(
+            r'open\s+github\s+(.+?)$',
+            text,
+            re.IGNORECASE
+        )
+        # Pattern 3: Just "github" (standalone, opens search page)
+        github_match3 = re.search(
+            r'^github$',
+            text,
+            re.IGNORECASE
+        )
+        # Pattern 4: "search github [query]" or "search on github [query]"
+        github_match4 = re.search(
+            r'search\s+(?:on\s+)?github\s+(.+?)$',
+            text,
+            re.IGNORECASE
+        )
+        
+        if github_match1 or github_match3:
+            # "open github" or "github" - open search page (no query)
+            return {
+                "intent": "github_search",
+                "entities": {"search_query": None}
+            }
+        elif github_match2:
+            # "open github [query]" - extract the query
+            search_query = github_match2.group(1).strip()
+            search_query = re.sub(r'[.,!?;:]+$', '', search_query).strip()
+            # Remove common trailing phrases like "and search", "and", etc.
+            search_query = re.sub(r'\s+(?:and\s+)?(?:search|find|look|for).*$', '', search_query, flags=re.IGNORECASE).strip()
+            # If query is empty or just common words, treat as "open github" (no query)
+            if not search_query or search_query.lower() in ['and', 'search', 'find', 'look', 'for']:
+                search_query = None
+            return {
+                "intent": "github_search",
+                "entities": {"search_query": search_query}
+            }
+        elif github_match4:
+            # "search github [query]" - extract the query
+            search_query = github_match4.group(1).strip()
+            search_query = re.sub(r'[.,!?;:]+$', '', search_query).strip()
+            if not search_query:
+                search_query = "github"
+            return {
+                "intent": "github_search",
+                "entities": {"search_query": search_query}
+            }
         
         # Open app pattern: "open [app name]" or "launch [app name]"
         app_match = re.search(r'(?:open|launch|start)\s+(?:the\s+)?(.+)', text)

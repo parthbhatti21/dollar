@@ -12,7 +12,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 class WakeWordDetector:
-    """Detects wake word 'dollar jack' using local models."""
+    """Detects wake words ('hey dollar', 'hello dollar', 'dollar jack') using local models."""
     
     def __init__(self, config):
         """
@@ -41,7 +41,6 @@ class WakeWordDetector:
             import pvporcupine
             
             access_key = self.config.get('wake_word', {}).get('porcupine_access_key', '').strip()
-            keyword_path = self.config.get('wake_word', {}).get('keyword_path', None)
             
             # Check if access key is empty or invalid (contains non-ASCII characters that aren't valid)
             if not access_key or len(access_key) < 10:  # Valid keys are typically long strings
@@ -49,42 +48,40 @@ class WakeWordDetector:
                 self._init_simple_vad()
                 return
             
-            # Check if custom keyword file exists
-            if keyword_path:
-                keyword_file = Path(keyword_path)
-                # If relative path, resolve relative to agent directory
-                if not keyword_file.is_absolute():
-                    keyword_file = Path(__file__).parent / keyword_path
-                
-                if keyword_file.exists():
-                    keyword_path = str(keyword_file.absolute())
-                    logger.info(f"Found custom keyword file: {keyword_path}")
-                else:
-                    logger.warning(f"Custom keyword file not found: {keyword_path}, checking default location")
-                    keyword_path = None
+            # Always auto-detect all keyword files in keywords directory
+            # This allows multiple wake words to work simultaneously
+            keyword_paths = self._get_keyword_paths()
             
-            # If no custom keyword path, check for default location
-            if not keyword_path:
-                default_keyword_path = self._get_keyword_path()
-                if default_keyword_path.exists():
-                    keyword_path = str(default_keyword_path.absolute())
-                    logger.info(f"Using default keyword file: {keyword_path}")
-                else:
-                    # Use built-in keywords (note: "dollar jack" is not built-in)
-                    # Using "computer" as a close alternative, or user can create custom keyword
-                    logger.warning("Custom 'dollar jack' keyword file not found.")
-                    logger.info("Using built-in 'computer' keyword. To use 'dollar jack', create a custom keyword at Picovoice Console.")
-                    keyword_path = None
+            # If no keywords found via auto-detection, check config for a single keyword path (backward compatibility)
+            if not keyword_paths:
+                keyword_path = self.config.get('wake_word', {}).get('keyword_path', None)
+                if keyword_path:
+                    keyword_file = Path(keyword_path)
+                    # If relative path, resolve relative to agent directory
+                    if not keyword_file.is_absolute():
+                        keyword_file = Path(__file__).parent / keyword_path
+                    
+                    if keyword_file.exists():
+                        keyword_paths = [str(keyword_file.absolute())]
+                        logger.info(f"Using single keyword file from config: {keyword_path}")
             
-            # Create Porcupine instance
-            if keyword_path and Path(keyword_path).exists():
+            # Create Porcupine instance with all detected keywords
+            if keyword_paths:
                 self.detector = pvporcupine.create(
                     access_key=access_key,
-                    keyword_paths=[keyword_path]
+                    keyword_paths=keyword_paths
                 )
-                logger.info(f"Using custom keyword file: {keyword_path}")
+                # Store keyword names for logging which one was detected
+                self._keyword_names = {
+                    i: Path(p).stem.replace('_en_mac_v3_0_0', '').replace('-', ' ').title()
+                    for i, p in enumerate(keyword_paths)
+                }
+                logger.info(f"Using {len(keyword_paths)} custom keyword file(s): {', '.join([Path(p).name for p in keyword_paths])}")
+                logger.info(f"Wake words enabled: {', '.join(self._keyword_names.values())}")
             else:
-                # Use built-in keyword (fallback to "computer" since "dollar jack" isn't built-in)
+                # Use built-in keyword (fallback to "computer" since custom keywords aren't found)
+                logger.warning("No custom keyword files found.")
+                logger.info("Using built-in 'computer' keyword. To use custom wake words, add .ppn files to the keywords directory.")
                 self.detector = pvporcupine.create(
                     access_key=access_key,
                     keywords=['computer']  # Built-in keyword as fallback
@@ -96,19 +93,28 @@ class WakeWordDetector:
             self.audio = pyaudio.PyAudio()
             # Use smaller buffer for lower latency (frame_length is typically 512)
             # frames_per_buffer should match Porcupine's frame_length for best performance
-            self.audio_stream = self.audio.open(
-                rate=self.detector.sample_rate,
-                channels=1,
-                format=pyaudio.paInt16,
-                input=True,
-                frames_per_buffer=self.detector.frame_length,
-                stream_callback=None,  # No callback for lower latency
-                start=False  # Start manually for better control
-            )
-            self.audio_stream.start_stream()
-            
-            logger.info("Porcupine wake word detector initialized")
-            self.method = 'porcupine'
+            try:
+                self.audio_stream = self.audio.open(
+                    rate=self.detector.sample_rate,
+                    channels=1,
+                    format=pyaudio.paInt16,
+                    input=True,
+                    frames_per_buffer=self.detector.frame_length,
+                    stream_callback=None,  # No callback for lower latency
+                    start=False  # Start manually for better control
+                )
+                self.audio_stream.start_stream()
+                logger.info("Porcupine wake word detector initialized")
+                self.method = 'porcupine'
+            except OSError as e:
+                # Microphone permission denied or not available
+                error_msg = str(e).lower()
+                if 'permission' in error_msg or 'denied' in error_msg or 'input device' in error_msg:
+                    logger.error("Microphone permission denied. Please grant microphone access in System Settings > Privacy & Security > Microphone")
+                    raise PermissionError("Microphone access denied. Please grant microphone permissions in System Settings.")
+                else:
+                    logger.error(f"Failed to open audio stream: {e}")
+                    raise
             
         except ImportError:
             logger.debug("pvporcupine not available, falling back to simple VAD")
@@ -142,9 +148,9 @@ class WakeWordDetector:
             )
             self.audio_stream.start()
             
-            # Simple keyword matching for "dollar jack"
+            # Simple keyword matching for all wake words
             self.keyword_patterns = [
-                'dollar jack', 'dollar jack', 'dollar'
+                'dollar jack', 'hey dollar', 'hello dollar', 'dollar'
             ]
             
             logger.info("Silero VAD wake word detector initialized")
@@ -173,16 +179,34 @@ class WakeWordDetector:
         
         # Simple energy-based VAD
         self.energy_threshold = 0.01
-        self.keyword_patterns = ['dollar jack', 'dollar']
+        self.keyword_patterns = ['dollar jack', 'hey dollar', 'hello dollar', 'dollar']
         
         logger.info("Simple VAD wake word detector initialized")
         self.method = 'simple'
     
-    def _get_keyword_path(self):
-        """Get path to custom keyword file."""
+    def _get_keyword_paths(self):
+        """Get paths to all custom keyword files."""
         keyword_dir = Path(__file__).parent / 'keywords'
         keyword_dir.mkdir(exist_ok=True)
-        return keyword_dir / 'Dollar-jack_en_mac_v3_0_0.ppn'
+        
+        # List of all wake word keyword files
+        keyword_files = [
+            'Dollar-jack_en_mac_v3_0_0.ppn',      # "dollar jack"
+            'Hey-dollar_en_mac_v3_0_0.ppn',       # "hey dollar"
+            'Hello-Dollar_en_mac_v3_0_0.ppn'      # "hello dollar"
+        ]
+        
+        # Return list of existing keyword file paths
+        keyword_paths = []
+        for filename in keyword_files:
+            keyword_path = keyword_dir / filename
+            if keyword_path.exists():
+                keyword_paths.append(str(keyword_path.absolute()))
+                logger.info(f"Found keyword file: {filename}")
+            else:
+                logger.debug(f"Keyword file not found: {filename}")
+        
+        return keyword_paths
     
     def detect(self):
         """
@@ -234,8 +258,17 @@ class WakeWordDetector:
                 return False
             
             # Process with Porcupine (this is the actual detection)
+            # Returns -1 if no keyword detected, or index (0, 1, 2...) if a keyword is detected
             keyword_index = self.detector.process(pcm)
-            return keyword_index >= 0
+            if keyword_index >= 0:
+                # Log which wake word was detected (for debugging)
+                if hasattr(self, '_keyword_names'):
+                    keyword_name = self._keyword_names.get(keyword_index, f"keyword_{keyword_index}")
+                    logger.info(f"Wake word detected: {keyword_name} (index: {keyword_index})")
+                else:
+                    logger.info(f"Wake word detected (index: {keyword_index})")
+                return True
+            return False
             
         except Exception as e:
             # Silently handle read errors (buffer underflow/overflow)

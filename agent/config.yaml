@@ -3,8 +3,8 @@
 # Wake word detection settings
 wake_word:
   method: porcupine  # Options: porcupine, silero, simple
-  porcupine_access_key: "😛"  # Get free key from https://console.picovoice.ai/ and replace it
-  keyword_path: "keywords/Dollar-jack_en_mac_v3_0_0.ppn"  # Path to custom keyword file (trained as "dollar jack")
+  porcupine_access_key: "9hh0EnNx9fMqzipUHY38zQLL7GWC3zDGSs1ipIEbL1bhvcIheNY/xw=="  # Get free key from https://console.picovoice.ai/ and replace this with your key
+  keyword_path: "keywords/Dollar-jack_en_mac_v3_0_0.ppn"  # Legacy: Auto-detects all .ppn files in keywords/ directory (hey dollar, hello dollar, dollar jack)
 
 # Speech-to-Text settings
 stt:
@@ -25,5 +25,5 @@ tts:
 # Audio settings
 audio:
   sample_rate: 16000  # Audio sample rate (Hz)
-  record_duration: 5  # Maximum recording duration after wake word (seconds)
+  record_duration: 3  # Maximum recording duration after wake word (seconds)
 
