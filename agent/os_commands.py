@@ -412,6 +412,59 @@ class OSCommands:
                 "error": f"Failed to open GitHub: {str(e)}"
             }
     
+    def open_cursor(self) -> Dict[str, any]:
+        """
+        Open Cursor application and press Cmd+M.
+        On macOS, opens Cursor and sends Cmd+M keyboard shortcut.
+        """
+        if self.platform != "darwin":
+            return {
+                "success": False,
+                "error": "Cursor opening is only supported on macOS"
+            }
+        
+        try:
+            # Open Cursor application
+            open_result = self._run_command(['open', '-a', 'Cursor'])
+            if not open_result.get('success'):
+                return {
+                    "success": False,
+                    "error": "Failed to open Cursor application"
+                }
+            
+            # Wait for Cursor to open
+            time.sleep(1.5)
+            
+            # Press Cmd+M using AppleScript
+            script = '''
+            tell application "System Events"
+                tell process "Cursor"
+                    -- Press Cmd+M
+                    key code 46 using {command down}
+                end tell
+            end tell
+            '''
+            
+            result = self._run_command(['osascript', '-e', script])
+            if result.get('success'):
+                return {
+                    "success": True,
+                    "message": "Opened Cursor and pressed Cmd+M"
+                }
+            else:
+                # Even if Cmd+M fails, Cursor was opened successfully
+                return {
+                    "success": True,
+                    "message": "Opened Cursor (Cmd+M may not have been sent)"
+                }
+        
+        except Exception as e:
+            logger.error(f"Error opening Cursor: {e}", exc_info=True)
+            return {
+                "success": False,
+                "error": f"Failed to open Cursor: {str(e)}"
+            }
+    
     def volume_up(self) -> Dict[str, any]:
         """Increase system volume."""
         if self.platform == "darwin":  # macOS

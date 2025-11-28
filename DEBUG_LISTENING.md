@@ -88,3 +88,4 @@ grep -i "error\|exception\|failed" "/Users/parthbhatti/Codes and backups/dollar/
 If it still doesn't work, share the log output and I can help debug further.
 
 
+

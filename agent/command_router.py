@@ -81,6 +81,9 @@ class CommandRouter:
                 # If still None, it means just "open github" - open search page without query
                 return self.os_commands.open_github_search(search_query)
             
+            elif intent == "open_cursor":
+                return self.os_commands.open_cursor()
+            
             elif intent == "volume_up":
                 return self.os_commands.volume_up()
             

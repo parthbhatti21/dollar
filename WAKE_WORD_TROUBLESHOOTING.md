@@ -106,3 +106,4 @@ To quickly test if wake word detection is working:
 If you don't see the detection message, follow the troubleshooting steps above.
 
 
+

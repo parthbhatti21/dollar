@@ -56,6 +56,9 @@ class IntentClassifier:
                 "open github", "github", "search github", "search on github",
                 "open github and search", "github search"
             ],
+            "open_cursor": [
+                "open cursor", "launch cursor", "start cursor", "cursor"
+            ],
             "volume_up": [
                 "volume up", "increase volume", "turn up volume", "louder",
                 "raise volume", "volume higher"
@@ -203,8 +206,8 @@ class IntentClassifier:
         # Check regex patterns FIRST (they handle complex patterns like reminders, alarms, Spotify, YouTube search)
         regex_match = self._regex_match(text_lower)
         if regex_match:
-            # Return immediately for reminder_set, alarm_set, timer_set, youtube_search, github_search, etc.
-            if regex_match.get('intent') in ['reminder_set', 'reminder_cancel', 'alarm_set', 'alarm_cancel', 'timer_set', 'timer_cancel', 'spotify_play', 'youtube_search', 'github_search']:
+            # Return immediately for reminder_set, alarm_set, timer_set, youtube_search, github_search, open_cursor, etc.
+            if regex_match.get('intent') in ['reminder_set', 'reminder_cancel', 'alarm_set', 'alarm_cancel', 'timer_set', 'timer_cancel', 'spotify_play', 'youtube_search', 'github_search', 'open_cursor']:
                 return regex_match
         
         # Also check if text contains Spotify keywords and "play"
@@ -639,6 +642,18 @@ class IntentClassifier:
             return {
                 "intent": "github_search",
                 "entities": {"search_query": search_query}
+            }
+        
+        # Cursor pattern: "open cursor" - must be checked BEFORE generic "open_app"
+        cursor_match = re.search(
+            r'(?:open|launch|start)\s+(?:the\s+)?cursor',
+            text,
+            re.IGNORECASE
+        )
+        if cursor_match:
+            return {
+                "intent": "open_cursor",
+                "entities": {}
             }
         
         # Open app pattern: "open [app name]" or "launch [app name]"
