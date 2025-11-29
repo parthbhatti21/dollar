@@ -134,6 +134,11 @@ class IntentClassifier:
                 "play track on spotify", "play music on spotify", "spotify", "play on 45",
                 "play in 45", "45 play", "play song on 45", "play on spot if i", "play on spot if i"
             ],
+            "close_dollar": [
+                "close dollar", "quit dollar", "exit dollar", "stop dollar",
+                "close dollar assistant", "quit dollar assistant", "exit dollar assistant",
+                "shut down dollar", "turn off dollar"
+            ],
             "greeting": [
                 "hello", "hi", "hey", "good morning", "good afternoon", "good evening",
                 "how are you", "how are you doing", "what's up", "how's it going"

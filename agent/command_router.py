@@ -84,6 +84,9 @@ class CommandRouter:
             elif intent == "open_cursor":
                 return self.os_commands.open_cursor()
             
+            elif intent == "close_dollar":
+                return self.os_commands.close_dollar()
+            
             elif intent == "volume_up":
                 return self.os_commands.volume_up()
             

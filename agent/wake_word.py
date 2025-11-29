@@ -44,7 +44,10 @@ class WakeWordDetector:
             
             # Check if access key is empty or invalid (contains non-ASCII characters that aren't valid)
             if not access_key or len(access_key) < 10:  # Valid keys are typically long strings
-                logger.debug("No valid Porcupine access key provided. Using fallback method.")
+                logger.warning("⚠️  No valid Porcupine access key provided. Using fallback simple VAD method.")
+                logger.warning("⚠️  Simple VAD will detect ANY speech (not specific wake words).")
+                logger.warning("⚠️  Get a free Porcupine key from https://console.picovoice.ai/ for proper wake word detection.")
+                print("⚠️  WARNING: Using fallback wake word detection (will trigger on any speech)")
                 self._init_simple_vad()
                 return
             
@@ -91,15 +94,18 @@ class WakeWordDetector:
             # Initialize audio stream with optimized settings
             import pyaudio
             self.audio = pyaudio.PyAudio()
-            # Use smaller buffer for lower latency (frame_length is typically 512)
-            # frames_per_buffer should match Porcupine's frame_length for best performance
+            # Use larger buffer to prevent overflow (especially with heavy Whisper models)
+            # frames_per_buffer should be a multiple of Porcupine's frame_length for best performance
+            # Using 2x frame_length gives more buffer room to prevent overflows
+            buffer_multiplier = 2  # Increase buffer to prevent overflows
+            frames_per_buffer = self.detector.frame_length * buffer_multiplier
             try:
                 self.audio_stream = self.audio.open(
                     rate=self.detector.sample_rate,
                     channels=1,
                     format=pyaudio.paInt16,
                     input=True,
-                    frames_per_buffer=self.detector.frame_length,
+                    frames_per_buffer=frames_per_buffer,
                     stream_callback=None,  # No callback for lower latency
                     start=False  # Start manually for better control
                 )
@@ -177,11 +183,14 @@ class WakeWordDetector:
         )
         self.audio_stream.start()
         
-        # Simple energy-based VAD
-        self.energy_threshold = 0.01
+        # Simple energy-based VAD - lower threshold for better sensitivity
+        # Adjust this if you get too many false positives (increase) or miss detections (decrease)
+        self.energy_threshold = 0.005  # Lowered from 0.01 for better sensitivity
         self.keyword_patterns = ['dollar jack', 'hey dollar', 'hello dollar', 'dollar']
         
         logger.info("Simple VAD wake word detector initialized")
+        logger.info(f"Energy threshold: {self.energy_threshold} (lower = more sensitive)")
+        print("⚠️  Using Simple VAD: Will detect ANY speech, not just wake words")
         self.method = 'simple'
     
     def _get_keyword_paths(self):
@@ -303,9 +312,12 @@ class WakeWordDetector:
         import numpy as np
         
         try:
+            # sounddevice InputStream.read() returns (audio_data, overflowed)
+            # It doesn't accept exception_on_overflow parameter (that's for PyAudio)
             audio_chunk, overflowed = self.audio_stream.read(1600)
             if overflowed:
-                logger.warning("Audio buffer overflowed")
+                # Only log as debug to reduce console noise - overflows are common with heavy models
+                logger.debug("Audio buffer overflowed (this is normal with heavy Whisper models)")
             
             audio_chunk = audio_chunk.flatten()
             
@@ -316,7 +328,7 @@ class WakeWordDetector:
             # WARNING: This will trigger on ANY speech, not just "hey dollar"
             # For production use, Porcupine is strongly recommended
             if energy > self.energy_threshold:
-                logger.warning("Simple VAD detected speech (not keyword-specific). Use Porcupine for proper wake word detection.")
+                logger.debug(f"Simple VAD detected speech (energy: {energy:.6f}, threshold: {self.energy_threshold})")
                 return True
             
             return False

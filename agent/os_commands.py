@@ -13,6 +13,8 @@ import threading
 import uuid
 import re
 import urllib.parse
+import os
+import sys
 from datetime import datetime, timedelta
 from typing import Dict
 
@@ -464,6 +466,156 @@ class OSCommands:
                 "success": False,
                 "error": f"Failed to open Cursor: {str(e)}"
             }
+    
+    def _is_mobile_platform(self) -> bool:
+        """
+        Detect if running on a mobile platform (iOS or Android).
+        
+        Returns:
+            bool: True if running on mobile, False otherwise
+        """
+        # Check for iOS (Darwin-based, but with mobile indicators)
+        if self.platform == "darwin":
+            # Check for iOS-specific indicators
+            try:
+                # iOS devices typically have specific system properties
+                # Check if running on iOS simulator or device
+                if 'SIMULATOR' in os.environ or 'IPHONE' in os.environ:
+                    return True
+                # Check for iOS-specific paths
+                if os.path.exists('/System/Library/CoreServices/SpringBoard.app'):
+                    return True
+            except:
+                pass
+        
+        # Check for Android (Linux-based, but with Android indicators)
+        if self.platform == "linux":
+            try:
+                # Android has specific system properties
+                if os.path.exists('/system/build.prop'):
+                    return True
+                if 'ANDROID_ROOT' in os.environ or 'ANDROID_DATA' in os.environ:
+                    return True
+            except:
+                pass
+        
+        # Additional check: try to detect via platform module
+        try:
+            import platform
+            machine = platform.machine().lower()
+            # iOS devices are typically arm64/armv7
+            if machine in ['arm64', 'armv7', 'armv7s'] and self.platform == "darwin":
+                # Could be iOS, but also could be macOS on Apple Silicon
+                # Check for iOS-specific indicators above
+                pass
+        except:
+            pass
+        
+        return False
+    
+    def close_dollar(self) -> Dict[str, any]:
+        """
+        Close the Dollar Assistant:
+        - On macOS: Send Ctrl+C to Terminal, then Cmd+Q to quit Terminal
+        - On mobile (iOS/Android): Terminate the app process gracefully
+        - On other platforms: Terminate the app process
+        
+        Cross-platform support for desktop and mobile.
+        """
+        # Check if running on mobile
+        is_mobile = self._is_mobile_platform()
+        
+        if is_mobile:
+            # Mobile platforms: terminate the app process
+            try:
+                logger.info("Closing Dollar Assistant on mobile platform...")
+                # Use os._exit for immediate termination (cleaner on mobile)
+                # Give a moment for the response to be sent
+                
+                def _terminate_after_delay():
+                    time.sleep(0.5)  # Brief delay to allow response
+                    os._exit(0)  # Immediate termination
+                
+                # Start termination in background thread
+                term_thread = threading.Thread(target=_terminate_after_delay, daemon=False)
+                term_thread.start()
+                
+                return {
+                    "success": True,
+                    "message": "Closing Dollar Assistant..."
+                }
+            except Exception as e:
+                logger.error(f"Error closing Dollar Assistant on mobile: {e}", exc_info=True)
+                # Fallback: try sys.exit
+                try:
+                    sys.exit(0)
+                except:
+                    return {
+                        "success": False,
+                        "error": f"Failed to close Dollar Assistant: {str(e)}"
+                    }
+        
+        elif self.platform == "darwin":
+            # macOS: Use AppleScript to send Ctrl+C and Cmd+Q to Terminal
+            try:
+                script = '''
+                tell application "System Events"
+                    if exists process "Terminal" then
+                        tell process "Terminal"
+                            set frontmost to true
+                            -- Send Ctrl+C to stop the running Python script
+                            keystroke "c" using {control down}
+                            delay 2
+                            -- Quit Terminal app (Command+Q)
+                            keystroke "q" using {command down}
+                        end tell
+                    end if
+                end tell
+                '''
+                result = self._run_command(['osascript', '-e', script])
+                if result.get('success'):
+                    return {
+                        "success": True,
+                        "message": "Closed Dollar Assistant in Terminal"
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "error": f"Failed to close Dollar Assistant: {result.get('error', 'Unknown error')}"
+                    }
+            except Exception as e:
+                logger.error(f"Error closing Dollar Assistant: {e}", exc_info=True)
+                return {
+                    "success": False,
+                    "error": f"Failed to close Dollar Assistant: {str(e)}"
+                }
+        
+        else:
+            # Windows/Linux: Terminate the process
+            try:
+                logger.info("Closing Dollar Assistant on desktop platform...")
+                
+                def _terminate_after_delay():
+                    time.sleep(0.5)  # Brief delay to allow response
+                    os._exit(0)  # Immediate termination
+                
+                # Start termination in background thread
+                term_thread = threading.Thread(target=_terminate_after_delay, daemon=False)
+                term_thread.start()
+                
+                return {
+                    "success": True,
+                    "message": "Closing Dollar Assistant..."
+                }
+            except Exception as e:
+                logger.error(f"Error closing Dollar Assistant: {e}", exc_info=True)
+                try:
+                    sys.exit(0)
+                except:
+                    return {
+                        "success": False,
+                        "error": f"Failed to close Dollar Assistant: {str(e)}"
+                    }
     
     def volume_up(self) -> Dict[str, any]:
         """Increase system volume."""

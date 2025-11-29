@@ -1,29 +1,21 @@
-# Dollar AI Voice Assistant Configuration
-
-# Wake word detection settings
 wake_word:
-  method: porcupine  # Options: porcupine, silero, simple
-  porcupine_access_key: "😛"  # Get free key from https://console.picovoice.ai/ and replace this with your key
-  keyword_path: "keywords/Dollar-jack_en_mac_v3_0_0.ppn"  # Legacy: Auto-detects all .ppn files in keywords/ directory (hey dollar, hello dollar, dollar jack)
+  method: porcupine
+  porcupine_access_key: "9hh0EnNx9fMqzipUHY38zQLL7GWC3zDGSs1ipIEbL1bhvcIheNY/xw=="
+  keyword_path: "keywords/Dollar-jack_en_mac_v3_0_0.ppn"
 
-# Speech-to-Text settings
 stt:
-  model: base  # Options: tiny, base, small, medium, large (larger = better accuracy, slower)
+  model: small
 
-# Intent classification settings
 intent:
-  use_fuzzy: true  # Use fuzzy string matching
-  use_llm_fallback: false  # Use local LLM as fallback (not implemented yet)
+  use_fuzzy: true
+  use_llm_fallback: false
 
-# Text-to-Speech settings
 tts:
-  method: pyttsx3  # Options: pyttsx3, coqui
-  rate: 150  # Speech rate (words per minute)
-  volume: 0.8  # Volume (0.0 to 1.0)
-  coqui_model: tts_models/en/ljspeech/tacotron2-DDC  # Coqui model name
+  method: pyttsx3
+  rate: 150
+  volume: 0.8
+  coqui_model: tts_models/en/ljspeech/tacotron2-DDC
 
-# Audio settings
 audio:
-  sample_rate: 16000  # Audio sample rate (Hz)
-  record_duration: 3  # Maximum recording duration after wake word (seconds)
-
+  sample_rate: 16000
+  record_duration: 3
