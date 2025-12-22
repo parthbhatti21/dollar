@@ -223,6 +223,9 @@ class CommandRouter:
                     "message": "Goodbye! Have a great day!"
                 }
             
+            elif intent == "dollar_login":
+                return self.os_commands.dollar_login()
+            
             else:
                 return {
                     "success": False,

@@ -160,3 +160,4 @@ pip install PyYAML
 Once transferred and set up, you can say **"close dollar"** on your Android device and it will work! 🎉
 
 
+

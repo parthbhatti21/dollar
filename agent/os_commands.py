@@ -2107,4 +2107,88 @@ class OSCommands:
             "success": True,
             "message": "Please cancel alarms manually in the Clock/Calendar app"
         }
+    
+    def dollar_login(self) -> Dict[str, any]:
+        """
+        Open daily login URLs in Chrome.
+        Opens 5 URLs in separate tabs:
+        1. Google Sheets
+        2. OneDrive
+        3. GoHighLevel Voice AI
+        4. Reportify
+        5. Booking
+        """
+        urls = [
+            "https://docs.google.com/spreadsheets/d/1eT_P6eSbSZVsMpTn0Za_kOQoZkXcmOceAjYTmw5ZxL0/edit?gid=481897317#gid=481897317",
+            "https://onedrive.live.com/view.aspx?resid=13A06F3921820A08!317&ithint=file%2Cxlsx&authkey=!ADs-ECufEQ0Fxe8",
+            "https://app.gohighlevel.com/v2/location/VYalbi1wvMvrFSt4X5Aa/ai-agents/voice-ai",
+            "https://reportify.chimneysweeps.com/",
+            "https://booking.chimneysweep.com/"
+        ]
+        
+        if self.platform == "darwin":  # macOS
+            try:
+                # Open all URLs in Chrome using open command
+                for url in urls:
+                    result = self._run_command(['open', '-a', 'Google Chrome', url])
+                    if not result.get('success'):
+                        logger.warning(f"Failed to open URL: {url}")
+                    time.sleep(0.3)  # Small delay between opening tabs
+                
+                return {
+                    "success": True,
+                    "message": "Opened all login pages in Chrome"
+                }
+            except Exception as e:
+                logger.error(f"Error opening login URLs: {e}", exc_info=True)
+                return {
+                    "success": False,
+                    "error": f"Failed to open login pages: {str(e)}"
+                }
+        elif self.platform == "windows":
+            try:
+                # Open all URLs in Chrome
+                for url in urls:
+                    result = self._run_command(f'start chrome "{url}"', shell=True)
+                    if not result.get('success'):
+                        logger.warning(f"Failed to open URL: {url}")
+                    time.sleep(0.3)
+                
+                return {
+                    "success": True,
+                    "message": "Opened all login pages in Chrome"
+                }
+            except Exception as e:
+                logger.error(f"Error opening login URLs: {e}", exc_info=True)
+                return {
+                    "success": False,
+                    "error": f"Failed to open login pages: {str(e)}"
+                }
+        elif self.platform == "linux":
+            try:
+                # Open all URLs in Chrome
+                for url in urls:
+                    result = self._run_command(['google-chrome', url])
+                    if not result.get('success'):
+                        # Try chromium as fallback
+                        result = self._run_command(['chromium', url])
+                    if not result.get('success'):
+                        logger.warning(f"Failed to open URL: {url}")
+                    time.sleep(0.3)
+                
+                return {
+                    "success": True,
+                    "message": "Opened all login pages in Chrome"
+                }
+            except Exception as e:
+                logger.error(f"Error opening login URLs: {e}", exc_info=True)
+                return {
+                    "success": False,
+                    "error": f"Failed to open login pages: {str(e)}"
+                }
+        else:
+            return {
+                "success": False,
+                "error": f"Login command not supported on platform: {self.platform}"
+            }
 

@@ -149,6 +149,10 @@ class IntentClassifier:
             "goodbye": [
                 "goodbye", "bye", "see you", "see you later", "farewell"
             ],
+            "dollar_login": [
+                "dollar login", "hey dollar login", "login", "daily login", "open login",
+                "dollar log in", "log in", "open daily tasks", "daily tasks"
+            ],
             "timer_set": [
                 "set timer", "timer", "start timer", "create timer", "set a timer",
                 "timer for", "timer of", "countdown", "set countdown"
